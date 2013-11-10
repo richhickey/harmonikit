@@ -12,9 +12,9 @@
       :master {:toggle 1.0}
       :master-curves {:attack 0.5 :decay 0.5 :fade 0.75 :release 0.0}
       :high-harmonics {:toggle 1.0 :taper 0.0}
-      :freq-envelope {:toggle 0.0 :init 0.0 :rate 0.1 :freq 0.0 :return 0.1
+      :freq-envelope {:toggle 1.0 :init 0.5 :rate 0.5 :freq -0.5 :return 0.5
                       :freq-fscale 0.0 :rate-fscale 0.0 :freq-ascale 0.0 :rate-ascale 0.0}
-      :lfo {:toggle 1.0 :rate 0.2 :fscale 0 :ramp 0.5 :amp-mod 0.9 :freq-mod 0.5 :depth 0.0}
+      :lfo {:toggle 0.0 :rate 0.2 :fscale 0.5 :ramp 0.5 :amp-mod 0.9 :freq-mod 0.5 :depth 0.5}
       
       :master-env
       {:gain {:val 0.5 :fscale 0.15 :ascale 0.0}
@@ -163,6 +163,10 @@
        (exp (* (bget bid :master-env k :ascale) aratio))
        (exp (* (bget bid :master-env k :fscale) fratio)))))
 
+(defn scale8 [scale]
+  (with-overloaded-ugens
+    (pow 2 (* 3.0 scale))))
+
 (defn hscaled [aval bid h k]
   (with-overloaded-ugens
     (* aval (pow 2 (lin-lin (bget bid :harmonics k h) -1.0 1.0 -3.0 3.0)))))
@@ -219,12 +223,28 @@
 
 (defn res [sig bid n]
   (with-overloaded-ugens
-    (* 4.0
+    (* 10
        (bget bid :resonances :toggle n)
        (bget bid :resonances :gain n)
        (resonz sig
                (octcps (lin-lin (bget bid :resonances :freq n) 0.0 1.0 1.0 10.0))
                (bget bid :resonances :width n)))))
+
+(defn fenv [fin bid aratio fratio]
+  (with-overloaded-ugens
+    (let [ffscale (scale8 (bget bid :freq-envelope :freq-fscale))
+          fascale (scale8 (bget bid :freq-envelope :freq-ascale))
+          rfscale (scale8 (bget bid :freq-envelope :rate-fscale))
+          rascale (scale8 (bget bid :freq-envelope :rate-ascale))
+          f0 (scaled (scaled (bget bid :freq-envelope :init) ffscale fratio) fascale aratio);;(bget bid :freq-envelope :init)
+          r0 (scaled (scaled (bget bid :freq-envelope :rate) rfscale fratio) rascale aratio);;(bget bid :freq-envelope :rate)
+          f1 (scaled (scaled (bget bid :freq-envelope :freq) ffscale fratio) fascale aratio);;(bget bid :freq-envelope :freq)
+          r1 (scaled (scaled (bget bid :freq-envelope :return) rfscale fratio) rascale aratio);;(bget bid :freq-envelope :return)
+          ectl (envelope [f0 f1 0] ;;[1.0 -1.0 0]
+                         [r0 r1] ;;[1.0 1.0]
+                         :linear)
+          env (env-gen:kr ectl)]
+      (-> fin cpsoct (+ (* env (bget bid :freq-envelope :toggle))) octcps))))
 
 (definst harmonikit
   [bid (buffer-id b)
@@ -237,7 +257,8 @@
         aratio (log (/ amp abase))
         fratio (log (/ freq fbase))
         lfo (lfo bid lfo-depth fratio)
-        mfreq (-> freq cpsoct (+ (* (bget bid :lfo :freq-mod)
+        envfreq (fenv freq bid aratio fratio)
+        mfreq (-> envfreq cpsoct (+ (* (bget bid :lfo :freq-mod)
                                     (lin-lin lfo -1.0 1.0 -0.1 0.1)))
                   octcps)
         mamp (-> amp ampdb (+ (* (bget bid :lfo :amp-mod)
@@ -273,5 +294,6 @@
        (res sig bid 2)
        (res sig bid 3))))
 
+(patch->buf patch b)
 (harmonikit (buffer-id b) 110)
 (stop)
