@@ -14,10 +14,10 @@
       :high-harmonics {:toggle 1.0 :taper 0.0}
       :freq-envelope {:toggle 0.0 :init 0.0 :rate 0.1 :freq 0.0 :return 0.1
                       :freq-fscale 0.0 :rate-fscale 0.0 :freq-ascale 0.0 :rate-ascale 0.0}
-      :lfo {:toggle 1.0 :rate 0.1 :fscale 0 :ramp 0.2 :amp-mod 0 :freq-mod 0 :depth 0}
+      :lfo {:toggle 1.0 :rate 0.2 :fscale 0 :ramp 0.5 :amp-mod 0.9 :freq-mod 0.5 :depth 0.0}
       
       :master-env
-      {:gain {:val 1.0 :fscale 0.15 :ascale 0.0}
+      {:gain {:val 0.5 :fscale 0.15 :ascale 0.0}
        :delay {:val 0.0 :fscale 0.0 :ascale 0.0}
        :attack {:val 0.5 :fscale 0.5 :ascale -0.75}
        :decay {:val 0.5 :fscale 0.0 :ascale 0.0}
@@ -167,12 +167,12 @@
   (with-overloaded-ugens
     (* aval (pow 2 (lin-lin (bget bid :harmonics k h) -1.0 1.0 -3.0 3.0)))))
 
-(defn harm [h bid freq gate aratio fratio delay attack decay sustain fade release]
+(defn harm [h hf bid freq gate aratio fratio delay attack decay sustain fade release]
   (with-overloaded-ugens
     (let [amp (/ (scaled
                   (scaled (bget bid :harmonics :gain h) (bget bid :harmonics :ascale h) aratio)
                   (bget bid :harmonics :ascale h) fratio)
-                 (+ 1 h))
+                 hf)
           delay (+ delay (bget bid :harmonics :delay h))
           attack (hscaled attack bid h :attack)
           decay (hscaled decay bid h :decay)
@@ -188,22 +188,53 @@
                           (bget bid :master-curves :release)]
                          4)
           env (env-gen:kr ectl gate)
-          hfreq (* (+ 1 h) freq)]
+          hfreq (* hf freq)]
       (* (bget bid :harmonics :toggle h)
          amp env
          (sin-osc hfreq)
          ;;anti-alias
          (select:kr (< hfreq 20000) [0.0 1.0])))))
 
+(defmacro primary-harms [n bid freq gate aratio fratio delay attack decay sustain fade release]
+  (let [hs (map (fn [h]
+                 `(harm ~h (+ 1 ~h) ~bid ~freq ~gate ~aratio ~fratio ~delay ~attack ~decay ~sustain ~fade ~release))
+                (range n))]
+    (cons '+ hs)))
+
+(defmacro high-harms [n bid freq gate aratio fratio delay attack decay sustain fade release]
+  (let [hs (map (fn [h]
+                  `(harm 23 ~h ~bid ~freq ~gate ~aratio ~fratio ~delay ~attack ~decay ~sustain ~fade ~release))
+                (range 24 n))]
+    (cons '+ hs)))
+
+(defn lfo [bid depth fratio]
+  (with-overloaded-ugens
+    (let [freq (scaled (lin-lin (bget bid :lfo :rate) 0.0 1.0 0.0 20.0)
+                       fratio (bget bid :lfo :fscale))
+          ectl (envelope [0 1.0]
+                         [(bget bid :lfo :ramp)]
+                         :linear)
+          env (env-gen:kr ectl)]
+      (* (+ depth (bget bid :lfo :depth)) env (bget bid :lfo :toggle) (sin-osc:kr freq)))))
+
 (definst harmonikit
   [bid (buffer-id b)
    freq 220
-   amp 0.5
-   gate 1.0]
+   amp 0.25
+   gate 1.0
+   lfo-depth 0.0]
   (let [abase 0.125
         fbase 220
         aratio (log (/ amp abase))
         fratio (log (/ freq fbase))
+        lfo (lfo bid lfo-depth fratio)
+        mfreq (-> freq cpsoct (+ (* (bget bid :lfo :freq-mod)
+                                    (lin-lin lfo -1.0 1.0 -0.1 0.1)))
+                  octcps)
+        mamp (-> amp ampdb (+ (* (bget bid :lfo :amp-mod)
+                                    (lin-lin lfo -1.0 1.0 -60.0 60.0)))
+                 dbamp)
+        
         gain (master-scaled (bget bid :master-env :gain :val) bid :gain aratio fratio)
         delay (bget bid :master-env :delay :val)
         attack (master-scaled (lin-lin (bget bid :master-env :attack :val) 0.0 1.0 0.0 4.0)
@@ -223,33 +254,10 @@
                         (bget bid :master-curves :fade)
                         (bget bid :master-curves :release)]
                        4)
-        env (env-gen:kr ectl gate amp :action FREE)]
-    (* gain
-       (+
-        (harm 0 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 1 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 2 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 3 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 4 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 5 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 6 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 7 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 8 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 9 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 10 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 11 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 12 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 13 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 14 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 15 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 16 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 17 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 18 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 19 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 20 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 21 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 22 bid freq gate aratio fratio delay attack decay sustain fade release)
-        (harm 23 bid freq gate aratio fratio delay attack decay sustain fade release)))))
+        env (env-gen:kr ectl gate mamp :action FREE)]
+    (* env gain
+       (+ (primary-harms 24 bid mfreq gate aratio fratio delay attack decay sustain fade release)
+          (high-harms 100 bid mfreq gate aratio fratio delay attack decay sustain fade release)))))
 
-(harmonikit (buffer-id b) 440)
+(harmonikit (buffer-id b) 110)
 (stop)
