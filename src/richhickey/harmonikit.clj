@@ -39,10 +39,10 @@
        :fscale [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]}
       
       :resonances
-      {:toggle [0.0 0.0 0.0 0.0]
-       :freq [0.1 0.1 0.1 0.1]
-       :width [0.1 0.1 0.1 0.1]
-       :gain [0.0 0.0 0.0 0.0]}})
+      {:toggle [1.0 1.0 0.0 0.0]
+       :freq [0.5 0.65 0.1 0.1]
+       :width [0.01 0.01 0.1 0.1]
+       :gain [0.95 0.95 0.0 0.0]}})
 
 (defn patch-offsets [offset level]
   (cond
@@ -217,6 +217,15 @@
           env (env-gen:kr ectl)]
       (* (+ depth (bget bid :lfo :depth)) env (bget bid :lfo :toggle) (sin-osc:kr freq)))))
 
+(defn res [sig bid n]
+  (with-overloaded-ugens
+    (* 4.0
+       (bget bid :resonances :toggle n)
+       (bget bid :resonances :gain n)
+       (resonz sig
+               (octcps (lin-lin (bget bid :resonances :freq n) 0.0 1.0 1.0 10.0))
+               (bget bid :resonances :width n)))))
+
 (definst harmonikit
   [bid (buffer-id b)
    freq 220
@@ -254,10 +263,15 @@
                         (bget bid :master-curves :fade)
                         (bget bid :master-curves :release)]
                        4)
-        env (env-gen:kr ectl gate mamp :action FREE)]
-    (* env gain
-       (+ (primary-harms 24 bid mfreq gate aratio fratio delay attack decay sustain fade release)
-          (high-harms 100 bid mfreq gate aratio fratio delay attack decay sustain fade release)))))
+        env (env-gen:kr ectl gate mamp :action FREE)
+        sig (* env gain
+               (+ (primary-harms 24 bid mfreq gate aratio fratio delay attack decay sustain fade release)
+                  (high-harms 100 bid mfreq gate aratio fratio delay attack decay sustain fade release)))]
+    (+ sig
+       (res sig bid 0)
+       (res sig bid 1)
+       (res sig bid 2)
+       (res sig bid 3))))
 
 (harmonikit (buffer-id b) 110)
 (stop)
