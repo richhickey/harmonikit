@@ -1,22 +1,22 @@
 {:harmonikit/rev 1
  :name "Patch 42"
 
- :master {:toggle true}
- :master-curves {:attack 0.0 :decay 0.0 :fade 0.0 :release 0.0}
- :high-harmonics {:toggle true :taper 0.0}
- :freq-envelope {:toggle false :init 0.0 :rate 0.1 :freq 0.0 :return 0.1
+ :master {:toggle 1.0}
+ :master-curves {:attack 0.5 :decay 0.5 :fade 0.75 :release 0.0}
+ :high-harmonics {:toggle 1.0 :taper 0.0}
+ :freq-envelope {:toggle 0.0 :init 0.0 :rate 0.1 :freq 0.0 :return 0.1
                  :freq-fscale 0.0 :rate-fscale 0.0 :freq-ascale 0.0 :rate-ascale 0.0}
- :lfo {:toggle true :rate 0.1 :fscale 0 :ramp 0.2 :amp-mod 0 :freq-mod 0 :depth 0}
- 
+ :lfo {:toggle 1.0 :rate 0.1 :fscale 0 :ramp 0.2 :amp-mod 0 :freq-mod 0 :depth 0}
+      
  :master-env
- {:gain {:val 0.0 :fscale 0.0 :ascale 1.0}
-  :delay {:val 0.0 :fscale 0.0 :ascale 1.0}
-  :attack {:val 0.0 :fscale 0.0 :ascale 1.0}
-  :decay {:val 0.0 :fscale 0.0 :ascale 1.0}
-  :sustain {:val 0.0 :fscale 0.0 :ascale 1.0}
-  :fade {:val 0.0 :fscale 0.0 :ascale 1.0}
-  :release {:val 0.0 :fscale 0.0 :ascale 1.0}}
- 
+ {:gain {:val 1.0 :fscale 0.15 :ascale 0.0}
+  :delay {:val 0.0 :fscale 0.0 :ascale 0.0}
+  :attack {:val 0.5 :fscale 0.5 :ascale -0.75}
+  :decay {:val 0.5 :fscale 0.0 :ascale 0.0}
+  :sustain {:val 0.25 :fscale 0.0 :ascale 0.0}
+  :fade {:val 0.5 :fscale 0.0 :ascale 0.0}
+  :release {:val 0.5 :fscale 0.0 :ascale 0.0}}
+      
  :harmonics
  {:gain [0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75
          0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75]
@@ -26,13 +26,12 @@
   :sustain [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]
   :fade [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]
   :release [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]
-  :toggle [true true true true true true true true true true true true
-           true true true true true true true true true true true true]
+  :toggle [1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0]
   :ascale [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]
   :fscale [0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0]}
- 
+      
  :resonances
- {:toggle [false false false false]
+ {:toggle [0.0 0.0 0.0 0.0]
   :freq [0.1 0.1 0.1 0.1]
   :width [0.1 0.1 0.1 0.1]
   :gain [0.0 0.0 0.0 0.0]}}
