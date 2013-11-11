@@ -3,6 +3,7 @@
 ;; aargh with the using
 ;; temporary until we can find where everything lives (not easy)
 (use 'overtone.live)
+(require '[overtone.osc :as osc])
 
 ;; a dummy patch that will be used to calc offsets and mappings
 (def patch
@@ -67,12 +68,6 @@
 (def b (buffer nparams))
 
 (buffer-id b)
-
-(defn scaler [n pbuf aratio fratio]
-  (with-overloaded-ugens
-    (* (+ 1.0 (index:kr pbuf n))
-       (+ 1.0 (* aratio (index:kr pbuf (+ 1 n))))
-       (+ 1.0 (* fratio (index:kr pbuf (+ 2 n)))))))
 
 (defn ugen-deps
   "Returns a set of the deps (arguments) of this ugen that are themselves
@@ -236,10 +231,10 @@
           fascale (scale8 (bget bid :freq-envelope :freq-ascale))
           rfscale (scale8 (bget bid :freq-envelope :rate-fscale))
           rascale (scale8 (bget bid :freq-envelope :rate-ascale))
-          f0 (scaled (scaled (bget bid :freq-envelope :init) ffscale fratio) fascale aratio);;(bget bid :freq-envelope :init)
-          r0 (scaled (scaled (bget bid :freq-envelope :rate) rfscale fratio) rascale aratio);;(bget bid :freq-envelope :rate)
-          f1 (scaled (scaled (bget bid :freq-envelope :freq) ffscale fratio) fascale aratio);;(bget bid :freq-envelope :freq)
-          r1 (scaled (scaled (bget bid :freq-envelope :return) rfscale fratio) rascale aratio);;(bget bid :freq-envelope :return)
+          f0 (scaled (scaled (bget bid :freq-envelope :init) ffscale fratio) fascale aratio)
+          r0 (scaled (scaled (bget bid :freq-envelope :rate) rfscale fratio) rascale aratio)
+          f1 (scaled (scaled (bget bid :freq-envelope :freq) ffscale fratio) fascale aratio)
+          r1 (scaled (scaled (bget bid :freq-envelope :return) rfscale fratio) rascale aratio)
           ectl (envelope [f0 f1 0] ;;[1.0 -1.0 0]
                          [r0 r1] ;;[1.0 1.0]
                          :linear)
@@ -294,6 +289,32 @@
        (res sig bid 2)
        (res sig bid 3))))
 
+(defn transmit-patch [client patch]
+  (let [tx-scalars (fn [k]
+                     (doseq [[attr v] (k patch)]
+                       (osc/osc-send client (str "/" (name k) "/" (name attr)) (float v))))]
+    (osc/osc-send client "/name" (:name patch))
+    (doseq [[k attrs] (:master-env patch)]
+      (doseq [[attr v] attrs]
+        (osc/osc-send client (str "/master-env/" (name k) "/" (name attr)) (float v))))
+    (dorun (map tx-scalars [:master :master-curves :freq-envelope :lfo :high-harmonics]))
+    (doseq [[attr vs] (-> patch :harmonics (dissoc :toggle))]
+      (apply osc/osc-send client (str "/harmonics/" (name attr)) (map float vs)))
+    (doseq [[attr vs] (:resonances patch)]
+      (doseq [i (range 4)]
+        (osc/osc-send client (str "/resonances/" (name attr) "/" i) (float (vs i)))))
+    (apply osc/osc-send client (str "/harmonics/toggle/0") (map float (subvec (-> patch :harmonics :toggle) 0 12)))
+    (apply osc/osc-send client (str "/harmonics/toggle/1") (map float (subvec (-> patch :harmonics :toggle) 12)))))
+
+(transmit-patch client patch)
+(def server (osc/osc-server 4242))
+(osc/osc-listen server (fn [msg] (println "Listener: " msg)) :debug)
+
+(def client (osc/osc-client "richs-ipad.local" 8000))
+(osc/osc-send client "/master-env/gain" (float 1.0))
+
+(transmit-patch client patch)
+
 (patch->buf patch b)
-(harmonikit (buffer-id b) 110)
+(harmonikit (buffer-id b) 440)
 (stop)
