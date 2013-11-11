@@ -4,6 +4,7 @@
 ;; temporary until we can find where everything lives (not easy)
 (use 'overtone.live)
 (require '[overtone.osc :as osc])
+(require '[clojure.core.async :as async])
 
 ;; a dummy patch that will be used to calc offsets and mappings
 (def patch
@@ -289,31 +290,51 @@
        (res sig bid 2)
        (res sig bid 3))))
 
-(defn transmit-patch [client patch]
+(defn transmit-patch [ch patch]
   (let [tx-scalars (fn [k]
                      (doseq [[attr v] (k patch)]
-                       (osc/osc-send client (str "/" (name k) "/" (name attr)) (float v))))]
-    (osc/osc-send client "/name" (:name patch))
+                       (async/put! ch [(str "/" (name k) "/" (name attr)) [(float v)]])))]
+    (async/put! ch ["/name" [(:name patch)]])
     (doseq [[k attrs] (:master-env patch)]
       (doseq [[attr v] attrs]
-        (osc/osc-send client (str "/master-env/" (name k) "/" (name attr)) (float v))))
+        (async/put! ch [(str "/master-env/" (name k) "/" (name attr)) [(float v)]])))
     (dorun (map tx-scalars [:master :master-curves :freq-envelope :lfo :high-harmonics]))
     (doseq [[attr vs] (-> patch :harmonics (dissoc :toggle))]
-      (apply osc/osc-send client (str "/harmonics/" (name attr)) (map float vs)))
+      (async/put! ch [(str "/harmonics/" (name attr)) (map float vs)]))
     (doseq [[attr vs] (:resonances patch)]
       (doseq [i (range 4)]
-        (osc/osc-send client (str "/resonances/" (name attr) "/" i) (float (vs i)))))
-    (apply osc/osc-send client (str "/harmonics/toggle/0") (map float (subvec (-> patch :harmonics :toggle) 0 12)))
-    (apply osc/osc-send client (str "/harmonics/toggle/1") (map float (subvec (-> patch :harmonics :toggle) 12)))))
+        (async/put! ch [(str "/resonances/" (name attr) "/" i) [(float (vs i))]])))
+    (async/put! ch [(str "/harmonics/toggle/0") (map float (subvec (-> patch :harmonics :toggle) 0 12))])
+    (async/put! ch [(str "/harmonics/toggle/1") (map float (subvec (-> patch :harmonics :toggle) 12))])))
 
-(transmit-patch client patch)
+(defn chan->client [chan client]
+  (async/go
+   (loop []
+     (let [[path args] (async/<! chan)]
+       (apply osc/osc-send client path args)
+       (recur)))))
+
+(defn server->chan [server chan]
+  (osc/osc-listen server (fn [msg] (async/put! chan msg)) chan))
+
 (def server (osc/osc-server 4242))
 (osc/osc-listen server (fn [msg] (println "Listener: " msg)) :debug)
+(osc/osc-rm-all-listeners server)
 
 (def client (osc/osc-client "richs-ipad.local" 8000))
-(osc/osc-send client "/master-env/gain" (float 1.0))
+(def cchan (async/chan 10))
+(chan->client cchan client)
+(transmit-patch cchan patch)
 
-(transmit-patch client patch)
+(def schan (async/chan 10))
+(server->chan server schan)
+
+(async/go (loop []
+      (let [msg (async/<! schan)]
+        (prn msg)
+        (recur))))
+
+(async/put! cchan ["/master-env/gain/val" [(float 1.0)]])
 
 (patch->buf patch b)
 (harmonikit (buffer-id b) 440)
