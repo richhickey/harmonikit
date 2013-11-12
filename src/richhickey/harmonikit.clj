@@ -1,10 +1,11 @@
-(ns richhickey.harmonikit)
+;;(ns richhickey.harmonikit) ;;not ready to be a lib yet, too much using etc, so this is an interactive file at present
 
 ;; aargh with the using
 ;; temporary until we can find where everything lives (not easy)
 (use 'overtone.live)
 (require '[overtone.osc :as osc])
 (require '[clojure.core.async :as async])
+(require '[clojure.edn :as edn])
 
 ;; a dummy patch that will be used to calc offsets and mappings
 (def patch
@@ -63,13 +64,15 @@
   (def nparams nparams))
 
 (def BASE_HARMS 24)
-(def NHARMS 64)
+(def NHARMS 100)
 
 ;;todo - make buffers part of synth objects to support multitimbral
 (def b (buffer nparams))
 
 (buffer-id b)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; patching overtone ;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn ugen-deps
   "Returns a set of the deps (arguments) of this ugen that are themselves
   upstream ugens."
@@ -126,6 +129,8 @@
         (str "whilst loading synthdef " (:name sdef))))))
 
 (alter-var-root #'overtone.sc.machinery.synthdef/load-synthdef (constantly load-synthdef-x))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; end patching overtone ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn patch->buf [patch buf]
   (let [arr (double-array nparams)
@@ -307,6 +312,27 @@
     (async/put! ch [(str "/harmonics/toggle/0") (map float (subvec (-> patch :harmonics :toggle) 0 12))])
     (async/put! ch [(str "/harmonics/toggle/1") (map float (subvec (-> patch :harmonics :toggle) 12))])))
 
+(defn edit-patch [patch {:keys [^String path args]}]
+  (let [[s1 s2 s3] (.split (subs path 1) "/")]
+    (case s1
+          "master-env"
+          (assoc-in patch [(keyword s1) (keyword s2) (keyword s3)] (first args))
+
+          ("master" "master-curves" "freq-envelope" "lfo" "high-harmonics")
+          (assoc-in patch [(keyword s1) (keyword s2)] (first args))
+
+          "harmonics"
+          (if (= s2 "toggle")
+            (let [off (* 12 (edn/read-string s3))]
+              (update-in patch [(keyword s1) (keyword s2)]
+                         #(reduce-kv (fn [ret i v] (assoc ret (+ i off) v)) % (vec args))))
+            (assoc-in patch [(keyword s1) (keyword s2)] (vec args)))
+
+          "resonances"
+          (assoc-in patch [(keyword s1) (keyword s2) (edn/read-string s3)] (first args))
+
+          patch)))
+
 (defn chan->client [chan client]
   (async/go
    (loop []
@@ -317,25 +343,27 @@
 (defn server->chan [server chan]
   (osc/osc-listen server (fn [msg] (async/put! chan msg)) chan))
 
+
+;;fiddle
+(def apatch (atom patch))
 (def server (osc/osc-server 4242))
-(osc/osc-listen server (fn [msg] (println "Listener: " msg)) :debug)
-(osc/osc-rm-all-listeners server)
 
 (def client (osc/osc-client "richs-ipad.local" 8000))
 (def cchan (async/chan 10))
 (chan->client cchan client)
-(transmit-patch cchan patch)
+(transmit-patch cchan @apatch)
 
+(osc/osc-rm-all-listeners server)
 (def schan (async/chan 10))
 (server->chan server schan)
 
 (async/go (loop []
       (let [msg (async/<! schan)]
-        (prn msg)
+        ;;(prn msg)
+        (swap! apatch edit-patch msg)
+        (patch->buf @apatch b)
         (recur))))
 
-(async/put! cchan ["/master-env/gain/val" [(float 1.0)]])
-
-(patch->buf patch b)
+;;(patch->buf patch b)
 (harmonikit (buffer-id b) 440)
 (stop)
