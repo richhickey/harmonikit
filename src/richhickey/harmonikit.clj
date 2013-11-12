@@ -249,12 +249,13 @@
 
 (definst harmonikit
   [bid (buffer-id b)
-   freq 220
+   note 60
    amp 0.25
    gate 1.0
    lfo-depth 0.0]
   (let [abase 0.125
         fbase 220
+        freq (midicps note)
         aratio (log (/ amp abase))
         fratio (log (/ freq fbase))
         lfo (lfo bid lfo-depth fratio)
@@ -364,6 +365,25 @@
         (patch->buf @apatch b)
         (recur))))
 
+(def qserver (osc/osc-server 8899))
+(osc/osc-rm-all-listeners qserver)
+(def qchan (async/chan 100))
+(server->chan qserver qchan)
+(def notes (atom {}))
+;;(osc-listen qserver (fn [msg] (println "Listener: " msg)) :debug)
+(async/go (loop []
+      (let [{:keys [path args]} (async/<! qchan)]
+        ;;(prn msg)
+        (when (= path "/qunexus/keys/note_and_velocity")
+          (let [[note vel] args]
+            (if (zero? vel)
+              (when-let [synth (get @notes note)]
+                (ctl synth :gate 0.0))
+              (swap! notes assoc note (harmonikit (buffer-id b) note (/ vel 127.0))))))
+        (recur))))
+
+
 ;;(patch->buf patch b)
-(harmonikit (buffer-id b) 440)
+(harmonikit (buffer-id b) 58)
+(ctl *1 :gate 0)
 (stop)
