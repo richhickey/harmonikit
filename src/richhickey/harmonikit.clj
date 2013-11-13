@@ -241,6 +241,10 @@
                (octcps (lin-lin (bget bid :resonances :freq n) 0.0 1.0 1.0 10.0))
                (bget bid :resonances :width n)))))
 
+(defn fine-rate [r]
+  (with-overloaded-ugens
+    (->> r (pow 2) (+ -1.0) squared)))
+
 (defn fenv [fin bid aratio fratio]
   (with-overloaded-ugens
     (let [ffscale (scale8 (bget bid :freq-envelope :freq-fscale))
@@ -248,18 +252,14 @@
           rfscale (scale8 (bget bid :freq-envelope :rate-fscale))
           rascale (scale8 (bget bid :freq-envelope :rate-ascale))
           f0 (bget bid :freq-envelope :init);;(scaled (scaled (bget bid :freq-envelope :init) ffscale fratio) fascale aratio)
-          r0 (bget bid :freq-envelope :rate);;(scaled (scaled (bget bid :freq-envelope :rate) rfscale fratio) rascale aratio)
+          r0 (fine-rate (bget bid :freq-envelope :rate));;(scaled (scaled (bget bid :freq-envelope :rate) rfscale fratio) rascale aratio)
           f1 (bget bid :freq-envelope :freq);;(scaled (scaled (bget bid :freq-envelope :freq) ffscale fratio) fascale aratio)
-          r1 (bget bid :freq-envelope :freq);;(scaled (scaled (bget bid :freq-envelope :return) rfscale fratio) rascale aratio)
+          r1 (fine-rate (bget bid :freq-envelope :return));;(scaled (scaled (bget bid :freq-envelope :return) rfscale fratio) rascale aratio)
           ectl (envelope [f0 f1 0] ;;[1.0 -1.0 0]
                          [r0 r1] ;;[1.0 1.0]
                          :linear)
           env (env-gen:kr ectl)]
       (-> fin cpsoct (+ (* env (bget bid :freq-envelope :toggle))) octcps))))
-
-(defn fine-rate [r]
-  (with-overloaded-ugens
-    (->> r (pow 2) (+ -1.0) squared)))
 
 (definst harmonikit
   [bid (buffer-id b)
