@@ -1,3 +1,12 @@
+;   Copyright (c) Rich Hickey. All rights reserved.
+;   The use and distribution terms for this software are covered by the
+;   Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
+;   which can be found in the file epl-v10.html at the root of this distribution.
+;   By using this software in any fashion, you are agreeing to be bound by
+;   the terms of this license.
+;   You must not remove this notice, or any other, from this software.
+
+
 ;;(ns richhickey.harmonikit) ;;not ready to be a lib yet, too much using etc, so this is an interactive file at present
 
 ;; aargh with the using
@@ -6,6 +15,7 @@
 (require '[overtone.osc :as osc])
 (require '[clojure.core.async :as async])
 (require '[clojure.edn :as edn])
+(require '[clojure.java.io :as io])
 
 ;; a dummy patch that will be used to calc offsets and mappings
 (def patch
@@ -237,15 +247,19 @@
           fascale (scale8 (bget bid :freq-envelope :freq-ascale))
           rfscale (scale8 (bget bid :freq-envelope :rate-fscale))
           rascale (scale8 (bget bid :freq-envelope :rate-ascale))
-          f0 (scaled (scaled (bget bid :freq-envelope :init) ffscale fratio) fascale aratio)
-          r0 (scaled (scaled (bget bid :freq-envelope :rate) rfscale fratio) rascale aratio)
-          f1 (scaled (scaled (bget bid :freq-envelope :freq) ffscale fratio) fascale aratio)
-          r1 (scaled (scaled (bget bid :freq-envelope :return) rfscale fratio) rascale aratio)
+          f0 (bget bid :freq-envelope :init);;(scaled (scaled (bget bid :freq-envelope :init) ffscale fratio) fascale aratio)
+          r0 (bget bid :freq-envelope :rate);;(scaled (scaled (bget bid :freq-envelope :rate) rfscale fratio) rascale aratio)
+          f1 (bget bid :freq-envelope :freq);;(scaled (scaled (bget bid :freq-envelope :freq) ffscale fratio) fascale aratio)
+          r1 (bget bid :freq-envelope :freq);;(scaled (scaled (bget bid :freq-envelope :return) rfscale fratio) rascale aratio)
           ectl (envelope [f0 f1 0] ;;[1.0 -1.0 0]
                          [r0 r1] ;;[1.0 1.0]
                          :linear)
           env (env-gen:kr ectl)]
       (-> fin cpsoct (+ (* env (bget bid :freq-envelope :toggle))) octcps))))
+
+(defn fine-rate [r]
+  (with-overloaded-ugens
+    (->> r (pow 2) (+ -1.0) squared)))
 
 (definst harmonikit
   [bid (buffer-id b)
@@ -261,22 +275,22 @@
         lfo (lfo bid lfo-depth fratio)
         envfreq (fenv freq bid aratio fratio)
         mfreq (-> envfreq cpsoct (+ (* (bget bid :lfo :freq-mod)
-                                    (lin-lin lfo -1.0 1.0 -0.1 0.1)))
+                                       (* 0.1 lfo)))
                   octcps)
         mamp (-> amp ampdb (+ (* (bget bid :lfo :amp-mod)
-                                    (lin-lin lfo -1.0 1.0 -60.0 60.0)))
+                                 (* 60.0 lfo)))
                  dbamp)
         
         gain (master-scaled (bget bid :master-env :gain :val) bid :gain aratio fratio)
         delay (bget bid :master-env :delay :val)
-        attack (master-scaled (lin-lin (bget bid :master-env :attack :val) 0.0 1.0 0.0 4.0)
+        attack (master-scaled (fine-rate (bget bid :master-env :attack :val))
                               bid :attack aratio fratio)
-        decay (master-scaled (lin-lin (bget bid :master-env :decay :val) 0.0 1.0 0.0 4.0)
+        decay (master-scaled (* 4 (fine-rate (bget bid :master-env :decay :val)))
                              bid :decay aratio fratio)
         sustain (master-scaled (bget bid :master-env :sustain :val) bid :sustain aratio fratio)
-        fade (master-scaled (lin-lin (bget bid :master-env :fade :val) 0.0 1.0 0.0 20.0)
+        fade (master-scaled (* 20.0 (bget bid :master-env :fade :val))
                             bid :fade aratio fratio)
-        release (master-scaled (lin-lin (bget bid :master-env :release :val) 0.0 1.0 0.0 4.0)
+        release (master-scaled (* 4.0 (bget bid :master-env :release :val))
                                bid :release aratio fratio)
         ectl (envelope [0 0 1.0 sustain 0 0]
                        [delay attack decay fade release]
@@ -287,7 +301,8 @@
                         (bget bid :master-curves :release)]
                        4)
         env (env-gen:kr ectl gate mamp :action FREE)
-        sig (* env gain
+        sig (* (bget bid :master :toggle)
+               env gain
                (+ (primary-harms 24 bid mfreq gate aratio fratio delay attack decay sustain fade release)
                   (high-harms 100 bid mfreq gate aratio fratio delay attack decay sustain fade release)))]
     (+ sig
@@ -346,12 +361,24 @@
 
 
 ;;fiddle
+;;to/from ./resources for now
+(defn save-patch [patch patch-name]
+  (with-open [file (io/writer (str "./resources/" patch-name ".edn"))]
+    (binding [*out* file] (pprint patch))))
+
+(defn load-patch [patch-name]
+  (with-open [file (io/reader (str "./resources/" patch-name ".edn"))]
+    (binding [*in* (java.io.PushbackReader. file)] (edn/read))))
+
 (def apatch (atom patch))
 (def server (osc/osc-server 4242))
 
 (def client (osc/osc-client "richs-ipad.local" 8000))
 (def cchan (async/chan 10))
 (chan->client cchan client)
+
+(reset! apatch (load-patch "testpatch"))
+(patch->buf @apatch b)
 (transmit-patch cchan @apatch)
 
 (osc/osc-rm-all-listeners server)
