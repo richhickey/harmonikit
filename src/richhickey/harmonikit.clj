@@ -386,7 +386,7 @@
 (def apatch (atom patch))
 (def server (osc/osc-server 4242))
 
-(def client (osc/osc-client "Aristotle.local" 8000))
+(def client (osc/osc-client "richs-ipad.local" 8000))
 (def cchan (async/chan 10))
 (chan->client cchan client)
 
@@ -426,13 +426,14 @@
 
 (comment
   ;; Load a patch
-  (patch->buf patch b)
+(patch->buf patch b)
 
   ;; Play a note
-  (harmonikit (buffer-id b) 70)
+(harmonikit (buf/buffer-id b) 70)
 
   ;; Stop the note
-  (node/ctl *1 :gate 0)
+(node/ctl *1 :gate 0)
 
   ;; Stop all notes
-  (srv/stop))
+(srv/stop)
+)
