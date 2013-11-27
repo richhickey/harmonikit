@@ -146,7 +146,7 @@
       (com/with-server-sync
         (if (< (count bytes) (- osc-util/BUFFER-SIZE 4))
           #(srv/snd "/d_recv" bytes)
-          (let [path (str (System/getProperty "java.io.tmpdir")  (-> (:name sdef) symbol name) ".scsyndef")]
+          (let [path (str (System/getProperty "java.io.tmpdir") "/" (-> (:name sdef) symbol name) ".scsyndef")]
             (sdef/synthdef-write sdef path)
             #(srv/snd "/d_load" path)))
         (str "whilst loading synthdef " (:name sdef))))))
